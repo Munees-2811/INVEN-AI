@@ -1,0 +1,29 @@
+# ---- Core app ----
+streamlit>=1.40.0
+pandas>=2.1.0
+numpy>=1.26.0
+plotly>=5.20.0
+python-dateutil>=2.9.0
+
+# ---- ML / forecasting ----
+scikit-learn>=1.4.0
+statsmodels>=0.14.0
+joblib>=1.3.0
+
+# ---- AI (Claude) ----
+anthropic>=0.40.0
+
+# ---- OCR / vision ----
+Pillow>=10.2.0
+pytesseract>=0.3.10          # optional local fallback (needs system tesseract)
+
+# ---- Voice assistant ----
+gTTS>=2.5.0                  # text-to-speech (optional)
+
+# ---- Utilities ----
+Faker>=24.0.0                # synthetic data generation
+python-dotenv>=1.0.0         # load ANTHROPIC_API_KEY from .env
+PyYAML>=6.0
+
+# ---- Dev / test (optional) ----
+pytest>=8.0.0

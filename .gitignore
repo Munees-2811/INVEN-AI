@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.ipynb_checkpoints/
+
+# Secrets / config
+.env
+.streamlit/secrets.toml
+
+# Data & model artifacts (generated locally)
+data/*.csv
+!data/.gitkeep
+models_registry/artifacts/
+models_registry/*.json
+!models_registry/.gitkeep
+mlruns/
+*.joblib
+*.pkl
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+*.log
