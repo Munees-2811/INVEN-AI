@@ -118,7 +118,13 @@ def test_full_mlops_pipeline(data):
 
     run = run_pipeline(data)
     assert run.finished_at is not None
-    assert len(run.stages) == 3
+    # demand → sales → stock-risk → inventory-risk, supplier, pricing,
+    # categorizer, customer = 8 stages in the extended pipeline.
+    assert len(run.stages) == 8
+    names = {s.name for s in run.stages}
+    assert {"demand_forecaster", "sales_forecaster", "stock_risk_classifiers",
+            "inventory_risk_meta", "dynamic_pricing"}.issubset(names)
+    assert all(s.status in {"passed", "failed", "skipped"} for s in run.stages)
     # at least the forecaster should register a version
     assert registry.get_versions("demand_forecaster")
     assert "psi" in run.drift

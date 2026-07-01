@@ -5,19 +5,21 @@ import streamlit as st
 
 from src.models.price_recommendation import price_recommendations_table, recommend_price
 from ui.components import charts
-from ui.state import data_version, get_data
+from ui.state import data_version, get_data, get_price_model
 
 
-@st.cache_data(show_spinner="Estimating elasticities & optimal prices…")
+@st.cache_data(show_spinner="Optimising prices with the demand-response model…")
 def _table(_v: int):
     data = get_data(_v)
-    return price_recommendations_table(data["sales"], data["products"])
+    model = get_price_model(_v)
+    return price_recommendations_table(data["sales"], data["products"], model=model)
 
 
 def render() -> None:
     st.header("💲 Dynamic Price Recommendations")
     v = data_version()
     data = get_data(v)
+    price_model = get_price_model(v)
     table = _table(v)
 
     gainers = table[table["expected_profit_change_pct"] > 0]
@@ -38,7 +40,7 @@ def render() -> None:
     p = label_map[choice]
     max_change = st.slider("Max price change", 0.05, 0.40, 0.20, step=0.05)
     rec = recommend_price(data["sales"], p["product_id"], float(p["unit_cost"]),
-                          float(p["unit_price"]), max_change=max_change)
+                          float(p["unit_price"]), max_change=max_change, model=price_model)
     c1, c2, c3 = st.columns(3)
     c1.metric("Current price", f"${rec['current_price']:.2f}")
     c2.metric("Recommended", f"${rec['recommended_price']:.2f}",
@@ -51,5 +53,7 @@ def render() -> None:
     st.divider()
     st.subheader("All recommendations")
     st.dataframe(table, use_container_width=True, hide_index=True)
-    st.caption("Elasticity estimated via log-log regression on historical (price, quantity); "
-               "price chosen to maximise expected profit within guardrails.")
+    st.caption("Prices optimised with a pooled **XGBoost demand-response regressor** "
+               "(demand constrained to be non-increasing in price); the profit-maximising "
+               "price is chosen within ±guardrail. Falls back to log-log elasticity for "
+               "cold-start SKUs. The `method` column shows which engine priced each item.")

@@ -3,13 +3,15 @@ from __future__ import annotations
 
 import streamlit as st
 
+from src.models.inventory_risk import reorder_hybrid
 from ui.components import charts
-from ui.state import data_version, get_health
+from ui.state import data_version, get_health, get_stock_risk
 
 
 def render() -> None:
     st.header("📦 Inventory & Reorder Intelligence")
-    health = get_health(data_version())
+    v = data_version()
+    health = get_health(v)
 
     counts = health["status"].value_counts().to_dict()
     charts.kpi_row(
@@ -44,7 +46,9 @@ def render() -> None:
             st.caption(f"Total recommended order: **{total_units:,} units** across {len(reorder)} SKUs.")
 
     st.divider()
-    tab1, tab2, tab3 = st.tabs(["🔴 Understock", "🟠 Overstock", "📋 Full table"])
+    tab1, tab2, tab3, tab4 = st.tabs(
+        ["🔴 Understock", "🟠 Overstock", "📋 Full table", "🤖 ML risk & priority"]
+    )
     with tab1:
         st.dataframe(
             health[health["status"] == "understock"][
@@ -66,3 +70,24 @@ def render() -> None:
         st.dataframe(
             health[health["status"].isin(status_filter)], use_container_width=True, hide_index=True
         )
+    with tab4:
+        st.markdown("**XGBoost stock-risk probabilities** and a hybrid reorder "
+                    "priority (rule-based reorder point ⊕ stockout probability).")
+        try:
+            _bundle, risk_tbl = get_stock_risk(v)
+            priority = reorder_hybrid(health, risk_tbl)
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Predicted stockouts", int((risk_tbl["pred_stockout"] == 1).sum()))
+            c2.metric("Priority orders", int((priority["reorder_action"] == "order_now_priority").sum()))
+            c3.metric("High-risk to watch", int((priority["reorder_action"] == "watch_high_risk").sum()))
+            st.dataframe(
+                priority[["product_name", "current_stock", "days_of_cover",
+                          "recommended_order_qty", "p_stockout", "reorder_urgency",
+                          "reorder_action"]].head(50),
+                use_container_width=True, hide_index=True,
+            )
+            st.caption("Three sibling XGBoost classifiers (stockout / understock / overstock) share "
+                       "one feature matrix; the reorder point stays the authoritative trigger while the "
+                       "stockout probability sets urgency. No separate reorder model is trained.")
+        except Exception as exc:  # never break the page if the model can't train
+            st.info(f"ML risk scores unavailable for this dataset ({exc}).")

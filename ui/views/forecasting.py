@@ -5,6 +5,7 @@ import streamlit as st
 
 from config import FORECAST_HORIZON_DAYS
 from src.models.demand_forecasting import forecast_product
+from src.models.sales_forecasting import forecast_sales
 from ui.components import charts
 from ui.state import data_version, get_data
 
@@ -46,7 +47,29 @@ def render() -> None:
     with st.expander("Forecast detail (table)"):
         st.dataframe(res.forecast, use_container_width=True, hide_index=True)
     st.caption(
-        "Gradient-boosted recursive forecaster on lag + calendar features, with an "
+        "XGBoost recursive forecaster on lag + calendar features, with an "
         "empirical 90% prediction interval from backtest residuals. Sparse products "
         "fall back to a seasonal-naive baseline."
     )
+
+    # --- Sales (revenue) forecast — built on top of the demand forecast --------
+    st.divider()
+    st.subheader("💰 Sales (revenue) forecast")
+    st.caption("A second XGBoost regressor maps forecasted **units → revenue** "
+               "(absorbing price/promo/mix effects). It consumes the demand forecast above.")
+    try:
+        sres = forecast_sales(data["sales"], pid, horizon=horizon)
+        sm = sres.metrics or {}
+        charts.kpi_row(
+            [
+                {"label": "Model", "value": sres.model_name.replace("_", " ").title()},
+                {"label": f"Revenue ({horizon}d)", "value": f"${sres.forecast['revenue'].sum():,.0f}"},
+                {"label": "Avg daily revenue", "value": f"${sres.forecast['revenue'].mean():,.0f}"},
+                {"label": "Fit R²", "value": f"{sm['r2']:.2f}" if sm.get("r2") is not None else "n/a",
+                 "help": "In-sample R² of the units→revenue mapping"},
+            ]
+        )
+        with st.expander("Revenue forecast detail (table)"):
+            st.dataframe(sres.forecast, use_container_width=True, hide_index=True)
+    except Exception as exc:  # keep the demand forecast usable regardless
+        st.info(f"Revenue forecast unavailable for this product ({exc}).")

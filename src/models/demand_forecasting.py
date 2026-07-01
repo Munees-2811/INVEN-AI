@@ -12,11 +12,12 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.base import clone
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 from config import FORECAST_HORIZON_DAYS, MIN_HISTORY_DAYS
 from src.data.preprocessing import FEATURE_COLUMNS, daily_demand, make_features
+from src.models._boost import backend_label, boosted_regressor
 
 
 @dataclass
@@ -48,12 +49,12 @@ def _seasonal_naive(series: pd.DataFrame, horizon: int) -> pd.DataFrame:
     )
 
 
-def _backtest_metrics(feat: pd.DataFrame, model: GradientBoostingRegressor, n_test: int = 28) -> tuple[dict, float]:
+def _backtest_metrics(feat: pd.DataFrame, model, n_test: int = 28) -> tuple[dict, float]:
     """Hold out the last ``n_test`` days to estimate error + residual spread."""
     if len(feat) <= n_test + 10:
         return {"mae": None, "rmse": None, "mape": None, "samples": len(feat)}, 1.0
     train, test = feat.iloc[:-n_test], feat.iloc[-n_test:]
-    m = GradientBoostingRegressor(**model.get_params())
+    m = clone(model)
     m.fit(train[FEATURE_COLUMNS], train["quantity"])
     pred = np.clip(m.predict(test[FEATURE_COLUMNS]), 0, None)
     actual = test["quantity"].to_numpy()
@@ -90,9 +91,8 @@ def forecast_product(
         return ForecastResult(product_id, series, fc, "seasonal_naive",
                               {"mae": None, "rmse": None, "mape": None, "samples": len(series)})
 
-    model = GradientBoostingRegressor(
-        n_estimators=200, max_depth=3, learning_rate=0.05, subsample=0.9, random_state=42
-    )
+    model = boosted_regressor(n_estimators=200, max_depth=3, learning_rate=0.05,
+                              subsample=0.9)
     metrics, resid_std = _backtest_metrics(feat, model)
     model.fit(feat[FEATURE_COLUMNS], feat["quantity"])
 
@@ -116,7 +116,7 @@ def forecast_product(
     fc_df["yhat_lower"] = np.clip(fc_df["yhat"] - 1.64 * resid_std, 0, None).round(2)
     fc_df["yhat_upper"] = (fc_df["yhat"] + 1.64 * resid_std).round(2)
 
-    return ForecastResult(product_id, series, fc_df, "gradient_boosting", metrics)
+    return ForecastResult(product_id, series, fc_df, backend_label(), metrics)
 
 
 def forecast_summary(sales: pd.DataFrame, product_id: str, horizon: int = FORECAST_HORIZON_DAYS) -> dict:

@@ -51,5 +51,5 @@ def render() -> None:
         ],
         use_container_width=True, hide_index=True,
     )
-    st.caption("Gradient-boosted classifier on Recency/Frequency/Monetary features. "
+    st.caption("XGBoost classifier on Recency/Frequency/Monetary features. "
                "Target customers with medium/high churn risk via offers.")

@@ -18,16 +18,16 @@ AI chatbot, voice assistant and auto-written business reports.
 
 | # | Capability | How it works |
 |---|------------|--------------|
-| 1 | **AI Demand Forecasting** | Gradient-boosted recursive forecaster on lag/calendar features with backtested accuracy and a 90% prediction interval; seasonal-naive fallback for sparse SKUs. |
-| 2 | **Smart Reorder Recommendations** | Safety stock from target service level, reorder point = lead-time demand + safety stock, order-up-to quantities. |
-| 3 | **Overstock / Understock Detection** | Days-of-cover classification across the whole catalogue with tied-up-capital estimates. |
+| 1 | **AI Demand & Sales Forecasting** | XGBoost recursive demand forecaster on lag/calendar features (backtested, 90% interval, seasonal-naive fallback) **plus** a second XGBoost regressor that maps forecasted units → revenue. |
+| 2 | **Smart Reorder Recommendations** | Hybrid: rule-based safety stock / reorder point / order-up-to quantities, prioritised by an XGBoost stockout probability (rule ⊕ ML, no redundant model). |
+| 3 | **Stockout / Overstock / Understock Prediction** | Three sibling XGBoost classifiers over one shared feature matrix, plus an XGBoost **inventory-risk meta-classifier** that stacks their outputs into a low/medium/high tier. |
 | 4 | **AI Sales Trend Analysis** | Trend/seasonality view, rising vs falling movers, ABC (Pareto) revenue analysis. |
 | 5 | **AI Chatbot** | Conversational assistant **grounded in a live business snapshot** (Claude), with a rule-based fallback. |
 | 6 | **OCR Invoice Scanning** | Claude-vision invoice → structured line items (JSON), editable + CSV export; Tesseract fallback. |
 | 7 | **AI Product Categorization** | TF-IDF (word + char n-grams) + Logistic Regression text classifier with cross-validated accuracy. |
-| 8 | **Supplier Performance Analysis** | Weighted scorecard (on-time, quality, lead-time reliability, price) from purchase-order history. |
-| 9 | **Customer Purchase Prediction** | RFM features + gradient-boosted repurchase/churn classifier (ROC-AUC reported). |
-| 10 | **Dynamic Price Recommendations** | Log-log price-elasticity estimation → profit-maximising price within guardrails. |
+| 8 | **Supplier Performance Analysis** | Weighted scorecard (on-time, quality, lead-time reliability, price) **plus** an XGBoost classifier that predicts next-order on-time reliability from purchase-order history. |
+| 9 | **Customer Purchase Prediction** | RFM features + XGBoost repurchase/churn classifier (ROC-AUC reported). |
+| 10 | **Dynamic Price Recommendations** | Pooled XGBoost demand-response regressor (demand constrained non-increasing in price) → profit-maximising price within guardrails; log-log elasticity fallback for cold-start SKUs. |
 | 11 | **Fraud & Anomaly Detection** | Isolation Forest over transaction features + deterministic fraud rules; value-at-risk summary. |
 | 12 | **Smart Alerts** | Prioritised, de-duplicated alert feed aggregating every model's signals. |
 | 13 | **AI-Generated Business Reports** | Executive weekly briefing written by Claude from assembled metrics (templated offline). |
@@ -138,8 +138,11 @@ This project is built to fit the **Claude Code → GitHub → PyCharm** loop:
 
 ## 📊 Tech stack
 
-`Streamlit` · `pandas` / `numpy` · `scikit-learn` · `statsmodels` · `Plotly` ·
+`Streamlit` · `pandas` / `numpy` · `XGBoost` · `scikit-learn` · `statsmodels` · `Plotly` ·
 `Anthropic Claude` · `Pillow` / `pytesseract` · `gTTS` · file-based MLOps registry.
+
+See [`docs/MODEL_ARCHITECTURE.md`](docs/MODEL_ARCHITECTURE.md) for the full
+feature → model map, prediction dependency flow, and consistency review.
 
 ---
 

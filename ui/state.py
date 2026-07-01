@@ -12,8 +12,10 @@ import streamlit as st
 from src.data.loader import load_all
 from src.models.anomaly_detection import anomaly_summary, detect_anomalies
 from src.models.inventory import inventory_health
+from src.models.price_recommendation import train_price_model
 from src.models.sales_trends import growth_metrics
-from src.models.supplier_analysis import supplier_scorecard
+from src.models.stock_risk import train_stock_risk
+from src.models.supplier_analysis import supplier_scorecard, train_supplier_model
 
 
 @st.cache_data(show_spinner=False)
@@ -43,6 +45,26 @@ def get_supplier_scores(_version: int = 0):
 @st.cache_data(show_spinner=False)
 def get_growth(_version: int = 0):
     return growth_metrics(get_data(_version)["sales"])
+
+
+@st.cache_resource(show_spinner="Training stock-risk classifiers…")
+def get_stock_risk(_version: int = 0):
+    """(StockRiskModels, per-SKU risk table) — stockout/understock/overstock."""
+    data = get_data(_version)
+    return train_stock_risk(data["sales"], data["products"], data["suppliers"])
+
+
+@st.cache_resource(show_spinner="Training price-response model…")
+def get_price_model(_version: int = 0):
+    data = get_data(_version)
+    return train_price_model(data["sales"], data["products"])
+
+
+@st.cache_resource(show_spinner="Training supplier reliability model…")
+def get_supplier_model(_version: int = 0):
+    """(SupplierModel, per-supplier predicted on-time reliability)."""
+    data = get_data(_version)
+    return train_supplier_model(data["purchase_orders"], data["suppliers"])
 
 
 def data_version() -> int:

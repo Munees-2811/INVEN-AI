@@ -11,13 +11,30 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.metrics import roc_auc_score
+
+from src.models._boost import boosted_classifier
+
+
+class _ConstantProba:
+    """Fallback 'model' used when only one purchase outcome is observed.
+
+    Mirrors the ``predict_proba`` shape of a real classifier so downstream code
+    (scoring table, ``predict_repurchase``) works unchanged.
+    """
+
+    def __init__(self, p: float, features: list[str]):
+        self.p = float(p)
+        self.features = features
+
+    def predict_proba(self, X):  # noqa: D401 - sklearn-compatible signature
+        n = len(X)
+        return np.column_stack([np.full(n, 1 - self.p), np.full(n, self.p)])
 
 
 @dataclass
 class PurchaseModel:
-    model: GradientBoostingClassifier
+    model: object              # XGBClassifier (or sklearn fallback)
     features: list[str]
     auc: float
 
@@ -48,19 +65,31 @@ def train_purchase_model(sales: pd.DataFrame, horizon_days: int = 21) -> tuple[P
     features = ["recency", "frequency", "monetary", "avg_basket", "n_items"]
     X, y = rfm[features].fillna(0), rfm["purchased_next"]
 
+    # Degenerate case: a single observed outcome — skip training and emit the
+    # base rate so the page/pipeline still get valid probabilities.
+    if y.nunique() < 2:
+        base = float(y.mean())
+        model = _ConstantProba(base, features)
+        rfm["repurchase_proba"] = round(base, 3)
+        rfm["churn_risk"] = np.select(
+            [rfm["repurchase_proba"] >= 0.6, rfm["repurchase_proba"] >= 0.3],
+            ["low", "medium"], default="high",
+        )
+        return PurchaseModel(model=model, features=features, auc=float("nan")), rfm
+
     auc = float("nan")
-    if y.nunique() > 1 and len(rfm) > 30:
+    if len(rfm) > 30:
         split = int(len(rfm) * 0.75)
         idx = rfm.sample(frac=1.0, random_state=42).index
         tr, te = idx[:split], idx[split:]
-        m = GradientBoostingClassifier(n_estimators=150, max_depth=3, random_state=42)
+        m = boosted_classifier(n_estimators=150, max_depth=3)
         m.fit(X.loc[tr], y.loc[tr])
         try:
             auc = float(roc_auc_score(y.loc[te], m.predict_proba(X.loc[te])[:, 1]))
         except Exception:
             auc = float("nan")
 
-    model = GradientBoostingClassifier(n_estimators=150, max_depth=3, random_state=42)
+    model = boosted_classifier(n_estimators=150, max_depth=3)
     model.fit(X, y)
     rfm["repurchase_proba"] = model.predict_proba(X)[:, 1].round(3)
     rfm["churn_risk"] = np.select(

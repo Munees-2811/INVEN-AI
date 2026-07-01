@@ -62,7 +62,7 @@ def _sidebar() -> None:
             st.rerun()
         st.caption("Data is synthetic & generated locally on first run.")
         st.divider()
-        st.caption("Stack: Streamlit · scikit-learn · Claude · file-based MLOps registry")
+        st.caption("Stack: Streamlit · XGBoost · scikit-learn · Claude · file-based MLOps registry")
 
 
 def main() -> None:
