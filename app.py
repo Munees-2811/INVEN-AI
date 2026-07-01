@@ -69,31 +69,50 @@ def main() -> None:
     ensure_data()
     _sidebar()
 
+    # NOTE: every view module exposes a callable named ``render``. Streamlit
+    # infers a page's URL pathname from the callable name when ``url_path`` is
+    # omitted, so all pages would collide on the pathname "render". An explicit,
+    # unique ``url_path`` per page avoids the StreamlitAPIException.
     pages = {
         "Home": [
-            st.Page(overview.render, title="Overview", icon="📊", default=True),
-            st.Page(alerts.render, title="Smart Alerts", icon="🔔"),
+            st.Page(overview.render, title="Overview", icon="📊",
+                    url_path="overview", default=True),
+            st.Page(alerts.render, title="Smart Alerts", icon="🔔",
+                    url_path="alerts"),
         ],
         "Forecasting & Inventory": [
-            st.Page(forecasting.render, title="Demand Forecasting", icon="🔮"),
-            st.Page(inventory.render, title="Reorder & Stock", icon="📦"),
-            st.Page(pricing.render, title="Price Recommendations", icon="💲"),
+            st.Page(forecasting.render, title="Demand Forecasting", icon="🔮",
+                    url_path="forecasting"),
+            st.Page(inventory.render, title="Reorder & Stock", icon="📦",
+                    url_path="inventory"),
+            st.Page(pricing.render, title="Price Recommendations", icon="💲",
+                    url_path="pricing"),
         ],
         "Analytics": [
-            st.Page(trends.render, title="Sales Trends", icon="📈"),
-            st.Page(suppliers.render, title="Suppliers", icon="🚚"),
-            st.Page(customers.render, title="Customers", icon="🧑‍🤝‍🧑"),
-            st.Page(anomalies.render, title="Fraud & Anomalies", icon="🛡️"),
-            st.Page(categorization.render, title="Categorization", icon="🏷️"),
+            st.Page(trends.render, title="Sales Trends", icon="📈",
+                    url_path="trends"),
+            st.Page(suppliers.render, title="Suppliers", icon="🚚",
+                    url_path="suppliers"),
+            st.Page(customers.render, title="Customers", icon="🧑‍🤝‍🧑",
+                    url_path="customers"),
+            st.Page(anomalies.render, title="Fraud & Anomalies", icon="🛡️",
+                    url_path="anomalies"),
+            st.Page(categorization.render, title="Categorization", icon="🏷️",
+                    url_path="categorization"),
         ],
         "AI Assistants": [
-            st.Page(chatbot.render, title="Chatbot", icon="💬"),
-            st.Page(voice.render, title="Voice Assistant", icon="🎙️"),
-            st.Page(ocr.render, title="Invoice OCR", icon="🧾"),
-            st.Page(reports.render, title="AI Reports", icon="📝"),
+            st.Page(chatbot.render, title="Chatbot", icon="💬",
+                    url_path="chatbot"),
+            st.Page(voice.render, title="Voice Assistant", icon="🎙️",
+                    url_path="voice"),
+            st.Page(ocr.render, title="Invoice OCR", icon="🧾",
+                    url_path="ocr"),
+            st.Page(reports.render, title="AI Reports", icon="📝",
+                    url_path="reports"),
         ],
         "Operations": [
-            st.Page(mlops.render, title="MLOps & Monitoring", icon="⚙️"),
+            st.Page(mlops.render, title="MLOps & Monitoring", icon="⚙️",
+                    url_path="mlops"),
         ],
     }
 
