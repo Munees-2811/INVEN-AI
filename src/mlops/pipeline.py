@@ -27,6 +27,7 @@ from src.models.demand_forecasting import forecast_product
 from src.models.inventory_risk import train_inventory_risk
 from src.models.price_recommendation import train_price_model
 from src.models.sales_forecasting import sales_forecast_summary
+from src.models.statistical_forecasting import forecast_product_stat
 from src.models.stock_risk import train_stock_risk
 from src.models.supplier_analysis import train_supplier_model
 
@@ -72,33 +73,52 @@ class PipelineRun:
 
 
 def _train_demand(sales: pd.DataFrame, sample_n: int = 12) -> StageResult:
-    """Backtest the forecaster across a representative product sample."""
+    """Champion/challenger demand stage.
+
+    Backtests the XGBoost forecaster **and** the Holt-Winters statistical model
+    on the same product sample with the same hold-out protocol, then registers
+    and promotes whichever wins on average MAPE. The registry therefore always
+    serves the empirically better forecaster instead of assuming ML wins.
+    """
     top = sales.groupby("product_id")["quantity"].sum().sort_values(ascending=False)
     pids = top.head(sample_n).index.tolist()
-    mapes, maes = [], []
+
+    scores = {"xgboost": [], "holt_winters": []}
+    maes = []
     for pid in pids:
-        res = forecast_product(sales, pid, horizon=FORECAST_HORIZON_DAYS)
-        m = res.metrics or {}
-        if m.get("mape") is not None:
-            mapes.append(m["mape"])
-        if m.get("mae") is not None:
-            maes.append(m["mae"])
-    if not mapes:
+        ml = forecast_product(sales, pid, horizon=FORECAST_HORIZON_DAYS)
+        if (ml.metrics or {}).get("mape") is not None:
+            scores["xgboost"].append(ml.metrics["mape"])
+        if (ml.metrics or {}).get("mae") is not None:
+            maes.append(ml.metrics["mae"])
+        stat = forecast_product_stat(sales, pid, horizon=FORECAST_HORIZON_DAYS)
+        if (stat.metrics or {}).get("mape") is not None:
+            scores["holt_winters"].append(stat.metrics["mape"])
+
+    if not scores["xgboost"] and not scores["holt_winters"]:
         return StageResult("demand_forecaster", "skipped", note="insufficient history to backtest")
 
-    avg_mape = float(np.mean(mapes))
+    avg = {k: float(np.mean(v)) if v else float("inf") for k, v in scores.items()}
+    champion = min(avg, key=avg.get)
+    champ_mape = avg[champion]
     metrics = {
-        "avg_mape": round(avg_mape, 2),
+        "champion": champion,
+        "avg_mape": round(champ_mape, 2),
+        "avg_mape_xgboost": round(avg["xgboost"], 2) if scores["xgboost"] else None,
+        "avg_mape_holt_winters": round(avg["holt_winters"], 2) if scores["holt_winters"] else None,
         "avg_mae": round(float(np.mean(maes)), 3) if maes else None,
-        "accuracy_pct": round(max(0.0, 100 - avg_mape), 2),
+        "accuracy_pct": round(max(0.0, 100 - champ_mape), 2),
         "products_evaluated": len(pids),
     }
-    passed = avg_mape <= GATES["demand_forecaster"]["max_mape"]
+    passed = champ_mape <= GATES["demand_forecaster"]["max_mape"]
     meta = registry.register_model(
         "demand_forecaster",
-        artifact={"type": "config", "model": backend_label(), "horizon": FORECAST_HORIZON_DAYS},
+        artifact={"type": "config", "model": champion, "backend": backend_label(),
+                  "challenger": min((k for k in avg if k != champion), key=avg.get, default=None),
+                  "horizon": FORECAST_HORIZON_DAYS},
         metrics=metrics,
-        params={"n_estimators": 200, "max_depth": 3, "learning_rate": 0.05},
+        params={"n_estimators": 200, "max_depth": 3, "learning_rate": 0.05,
+                "statistical": "holt_winters additive trend+seasonality (7d)"},
         validation={"gate": GATES["demand_forecaster"], "passed": passed},
         data_hash=registry.data_fingerprint(sales.shape, sales["date"].max()),
         promote=passed,

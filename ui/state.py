@@ -11,7 +11,7 @@ import streamlit as st
 
 from src.data.loader import load_all
 from src.models.anomaly_detection import anomaly_summary, detect_anomalies
-from src.models.inventory import inventory_health
+from src.models.inventory import inventory_health, reorder_plan
 from src.models.price_recommendation import train_price_model
 from src.models.sales_trends import growth_metrics
 from src.models.stock_risk import train_stock_risk
@@ -27,6 +27,13 @@ def get_data(_version: int = 0) -> dict:
 def get_health(_version: int = 0):
     data = get_data(_version)
     return inventory_health(data["sales"], data["products"], data["suppliers"])
+
+
+@st.cache_data(show_spinner="Building trend-aware reorder plan…")
+def get_reorder_plan(_version: int = 0):
+    """inventory_health + demand momentum → trend-adjusted order quantities."""
+    data = get_data(_version)
+    return reorder_plan(data["sales"], data["products"], data["suppliers"])
 
 
 @st.cache_data(show_spinner="Scanning for anomalies…")

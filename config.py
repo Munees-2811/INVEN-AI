@@ -24,9 +24,8 @@ ROOT_DIR = Path(__file__).resolve().parent
 DATA_DIR = ROOT_DIR / "data"
 REGISTRY_DIR = ROOT_DIR / "models_registry"
 ARTIFACTS_DIR = REGISTRY_DIR / "artifacts"
-ASSETS_DIR = ROOT_DIR / "assets"
 
-for _d in (DATA_DIR, REGISTRY_DIR, ARTIFACTS_DIR, ASSETS_DIR):
+for _d in (DATA_DIR, REGISTRY_DIR, ARTIFACTS_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
 # Primary data files (created by data/generate_synthetic_data.py)

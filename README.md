@@ -18,8 +18,8 @@ AI chatbot, voice assistant and auto-written business reports.
 
 | # | Capability | How it works |
 |---|------------|--------------|
-| 1 | **AI Demand & Sales Forecasting** | XGBoost recursive demand forecaster on lag/calendar features (backtested, 90% interval, seasonal-naive fallback) **plus** a second XGBoost regressor that maps forecasted units → revenue. |
-| 2 | **Smart Reorder Recommendations** | Hybrid: rule-based safety stock / reorder point / order-up-to quantities, prioritised by an XGBoost stockout probability (rule ⊕ ML, no redundant model). |
+| 1 | **AI Demand & Sales Forecasting** | Champion/challenger: XGBoost recursive forecaster vs Holt-Winters exponential smoothing, backtested on the same hold-out — the winner is promoted. A second XGBoost regressor maps forecasted units → revenue. |
+| 2 | **Smart Reorder Recommendations** | Hybrid rule ⊕ ML: safety stock / reorder point / order-up-to quantities, **trend-adjusted** to 30-day demand momentum, prioritised by stockout probability, and exported as supplier-grouped PO drafts with minimum-order checks. |
 | 3 | **Stockout / Overstock / Understock Prediction** | Three sibling XGBoost classifiers over one shared feature matrix, plus an XGBoost **inventory-risk meta-classifier** that stacks their outputs into a low/medium/high tier. |
 | 4 | **AI Sales Trend Analysis** | Trend/seasonality view, rising vs falling movers, ABC (Pareto) revenue analysis. |
 | 5 | **AI Chatbot** | Conversational assistant **grounded in a live business snapshot** (Claude), with a rule-based fallback. |
@@ -32,7 +32,7 @@ AI chatbot, voice assistant and auto-written business reports.
 | 12 | **Smart Alerts** | Prioritised, de-duplicated alert feed aggregating every model's signals. |
 | 13 | **AI-Generated Business Reports** | Executive weekly briefing written by Claude from assembled metrics (templated offline). |
 | 14 | **Voice Assistant** | Grounded Q&A with spoken (gTTS) playback and browser mic capture. |
-| 15 | **MLOps Pipeline** | preprocess → train → validate (quality gates) → version → deploy → monitor, with drift detection & performance tracking. |
+| 15 | **MLOps Pipeline** | preprocess → train → validate (quality gates) → version → deploy → monitor. Champion/challenger model selection, statistical drift testing (PSI + Kolmogorov–Smirnov), performance tracking, and one-click promote/rollback of any registered version. |
 
 ---
 

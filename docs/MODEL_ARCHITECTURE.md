@@ -16,9 +16,9 @@ scikit-learn gradient boosting, preserving the offline / zero-network promise.
 
 | # | Feature | Model | Module | Key inputs (only) | Depends on |
 |---|---------|-------|--------|-------------------|------------|
-| 1 | Demand Forecasting | **XGBoost Regressor** (recursive) | `demand_forecasting.py` | lag + calendar features of a product's daily demand | — |
+| 1 | Demand Forecasting | **XGBoost Regressor** (recursive) — champion/challenger vs **Holt-Winters** (`statistical_forecasting.py`) | `demand_forecasting.py` | lag + calendar features of a product's daily demand | — |
 | 2 | Sales Forecasting | **XGBoost Regressor** on demand output | `sales_forecasting.py` | forecasted **units** (from #1) + calendar + recent selling price | #1 Demand |
-| 3 | Smart Reordering | **Hybrid**: rule reorder-point ⊕ XGBoost stockout proba | `inventory.py` + `inventory_risk.reorder_hybrid` | rule: demand rate, lead time, service level; ML: stockout probability (#4) | #4 Stockout |
+| 3 | Smart Reordering | **Hybrid**: rule reorder-point ⊕ XGBoost stockout proba, **trend-adjusted** (`reorder_plan`) with supplier-grouped PO drafting (`build_purchase_orders`) | `inventory.py` + `inventory_risk.reorder_hybrid` | rule: demand rate, lead time, service level; trend: 30-day momentum; ML: stockout probability (#4) | #4 Stockout, sales momentum |
 | 4a | Stockout Prediction | **XGBoost Classifier** | `stock_risk.py` | shared SKU risk features | #1 demand stats |
 | 4b | Understock Prediction | **XGBoost Classifier** | `stock_risk.py` | shared SKU risk features | #1 demand stats |
 | 4c | Overstock Prediction | **XGBoost Classifier** | `stock_risk.py` | shared SKU risk features | #1 demand stats |
@@ -132,4 +132,18 @@ surfaced rather than hidden:
 4. **Recursive demand forecasting compounds error.** Multi-step recursion feeds
    predictions back as features. A direct multi-horizon model or quantile
    objective would tighten long-horizon intervals; the current empirical interval
-   from backtest residuals is a pragmatic stand-in.
+   from backtest residuals is a pragmatic stand-in. *Mitigation shipped:* the
+   pipeline now backtests a **Holt-Winters** statistical challenger on the same
+   hold-out and promotes whichever forecaster wins on MAPE, so a structural
+   weakness in either approach is caught by the other.
+
+5. **Drift detection is now two-tests.** PSI (magnitude) plus a two-sample
+   Kolmogorov–Smirnov test (significance). A retrain fires on PSI ≥ 0.2 or a
+   significant KS result with a non-trivial effect (p < 0.01 and stat > 0.1) —
+   the effect-size guard prevents large-N samples from triggering retrains on
+   microscopic shifts.
+
+6. **Reordering follows the trend, not just the level.** `reorder_plan` scales
+   the rule quantity by damped, capped 30-day momentum (±25% max), and
+   `build_purchase_orders` groups drafts per supplier and checks them against
+   the supplier's minimum order value before export.

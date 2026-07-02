@@ -37,7 +37,13 @@ def population_stability_index(reference: np.ndarray, current: np.ndarray, bins:
 
 
 def detect_demand_drift(sales: pd.DataFrame, window_days: int = 30) -> dict:
-    """Compare recent demand distribution against the prior window."""
+    """Compare recent demand distribution against the prior window.
+
+    Two complementary tests: PSI (magnitude of the shift, binned) and a
+    two-sample Kolmogorov–Smirnov test (statistical significance of the shift).
+    A retrain is recommended when the shift is material (PSI ≥ threshold) or
+    clearly significant with a non-trivial effect (KS p < 0.01, stat > 0.1).
+    """
     df = sales.copy()
     df["date"] = pd.to_datetime(df["date"])
     end = df["date"].max()
@@ -47,16 +53,30 @@ def detect_demand_drift(sales: pd.DataFrame, window_days: int = 30) -> dict:
         & (df["date"] > end - pd.Timedelta(days=2 * window_days))
     ]["quantity"].to_numpy()
     psi = population_stability_index(reference, recent)
+
+    ks_stat, ks_pvalue = 0.0, 1.0
+    if len(reference) >= 20 and len(recent) >= 20:
+        try:
+            from scipy.stats import ks_2samp
+
+            res = ks_2samp(reference, recent)
+            ks_stat, ks_pvalue = float(res.statistic), float(res.pvalue)
+        except Exception:  # scipy hiccup must not break monitoring
+            pass
+
+    ks_drift = ks_pvalue < 0.01 and ks_stat > 0.10
     status = "stable"
-    if psi >= DRIFT_PSI_THRESHOLD:
+    if psi >= DRIFT_PSI_THRESHOLD or ks_drift:
         status = "drift_detected"
-    elif psi >= DRIFT_PSI_THRESHOLD / 2:
+    elif psi >= DRIFT_PSI_THRESHOLD / 2 or ks_pvalue < 0.05:
         status = "minor_shift"
     return {
         "psi": round(psi, 4),
         "threshold": DRIFT_PSI_THRESHOLD,
+        "ks_stat": round(ks_stat, 4),
+        "ks_pvalue": round(ks_pvalue, 4),
         "status": status,
-        "recommend_retrain": psi >= DRIFT_PSI_THRESHOLD,
+        "recommend_retrain": bool(psi >= DRIFT_PSI_THRESHOLD or ks_drift),
         "reference_n": int(len(reference)),
         "recent_n": int(len(recent)),
     }

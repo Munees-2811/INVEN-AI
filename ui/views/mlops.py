@@ -88,6 +88,27 @@ def _render_registry() -> None:
                 )
             st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
+            # promote / rollback: point production at any registered version
+            versions = [ver["version"] for ver in entry["versions"]]
+            if len(versions) > 1:
+                c1, c2 = st.columns([2, 1])
+                with c1:
+                    target = st.selectbox(
+                        "Serve version", versions,
+                        index=versions.index(prod) if prod in versions else 0,
+                        key=f"promote_{name}",
+                        help="Promote an older version to roll back, or a newer one to roll forward.",
+                    )
+                with c2:
+                    st.write("")  # vertical alignment
+                    if st.button("Promote to production", key=f"promote_btn_{name}",
+                                 disabled=(target == prod), use_container_width=True):
+                        if registry.promote_version(name, int(target)):
+                            st.toast(f"{name} v{target} promoted to production.")
+                            st.rerun()
+                        else:
+                            st.error("Promotion failed — version not found.")
+
 
 def _render_monitoring(data: dict) -> None:
     st.subheader("📈 Performance Tracking")
@@ -104,9 +125,13 @@ def _render_monitoring(data: dict) -> None:
 
     st.subheader("🌊 Data Drift Monitor")
     drift = monitoring.detect_demand_drift(data["sales"])
-    c1, c2, c3 = st.columns(3)
-    c1.metric("PSI", drift["psi"])
-    c2.metric("Status", drift["status"])
-    c3.metric("Retrain?", "Yes" if drift["recommend_retrain"] else "No")
-    st.caption("Population Stability Index between the last 30 days and the prior 30 days of demand. "
-               "PSI ≥ 0.2 indicates meaningful drift and triggers a retrain recommendation.")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("PSI", drift["psi"], help="Population Stability Index — magnitude of the shift")
+    c2.metric("KS p-value", drift.get("ks_pvalue", "n/a"),
+              help=f"Two-sample Kolmogorov–Smirnov test (stat={drift.get('ks_stat', 'n/a')}) — "
+                   "statistical significance of the shift")
+    c3.metric("Status", drift["status"])
+    c4.metric("Retrain?", "Yes" if drift["recommend_retrain"] else "No")
+    st.caption("Last 30 days vs the prior 30 days of demand, tested two ways: PSI ≥ 0.2 "
+               "(material shift) or a significant Kolmogorov–Smirnov test (p < 0.01 with "
+               "statistic > 0.1) triggers a retrain recommendation.")

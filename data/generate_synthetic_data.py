@@ -67,7 +67,6 @@ def _build_products() -> pd.DataFrame:
                         "supplier_id": f"S{RNG.integers(1, len(SUPPLIER_NAMES) + 1):02d}",
                         "shelf_life_days": int(RNG.choice([30, 60, 90, 180, 365, 730])),
                         "current_stock": int(RNG.integers(20, 400)),
-                        "reorder_point": 0,  # filled by the reorder model later
                         "base_daily_demand": round(float(RNG.uniform(2, 40)), 1),
                     }
                 )

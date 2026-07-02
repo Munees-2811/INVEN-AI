@@ -141,3 +141,92 @@ def inventory_health(
         )
     df = pd.DataFrame(rows)
     return df.sort_values(["needs_reorder", "days_of_cover"], ascending=[False, True]).reset_index(drop=True)
+
+
+# --------------------------------------------------------------------------- #
+# Trend-aware reorder plan + purchase-order drafting
+# --------------------------------------------------------------------------- #
+# How strongly demand momentum scales the order: half of the observed change,
+# capped at ±50% momentum → factor bounded to [0.75, 1.25].
+TREND_DAMPING = 0.5
+TREND_CAP_PCT = 50.0
+
+
+def reorder_plan(
+    sales: pd.DataFrame,
+    products: pd.DataFrame,
+    suppliers: pd.DataFrame | None = None,
+    window_days: int = 30,
+) -> pd.DataFrame:
+    """Reorder plan that adjusts quantities to the demand *trend*.
+
+    Merges the rule-based reorder table (:func:`inventory_health`) with recent
+    product momentum (:func:`sales_trends.product_momentum`): rising SKUs get an
+    upsized suggested order, falling SKUs a downsized one, so replenishment
+    follows where demand is heading rather than only where it has been. The
+    adjustment is damped and capped to stay conservative.
+    """
+    from src.models.sales_trends import product_momentum
+
+    health = inventory_health(sales, products, suppliers)
+    mom = product_momentum(sales, window_days)[["product_id", "change_pct", "trend"]]
+    plan = health.merge(mom, on="product_id", how="left")
+    plan["trend"] = plan["trend"].fillna("stable")
+    plan["change_pct"] = plan["change_pct"].fillna(0.0)
+
+    factor = 1.0 + plan["change_pct"].clip(-TREND_CAP_PCT, TREND_CAP_PCT) / 100.0 * TREND_DAMPING
+    plan["trend_factor"] = factor.round(2)
+    plan["suggested_order_qty"] = (
+        np.ceil(plan["recommended_order_qty"] * factor).clip(lower=0).astype(int)
+    )
+    return plan.sort_values(["needs_reorder", "days_of_cover"],
+                            ascending=[False, True]).reset_index(drop=True)
+
+
+def build_purchase_orders(
+    plan: pd.DataFrame,
+    products: pd.DataFrame,
+    suppliers: pd.DataFrame | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Turn a reorder plan into per-supplier draft purchase orders.
+
+    Returns ``(lines, summary)``: one order line per SKU with a positive
+    quantity, and a per-supplier roll-up with total value and a check against
+    the supplier's minimum order value (so an MSME owner sees at a glance which
+    drafts are ready to send and which need topping up).
+    """
+    qty_col = "suggested_order_qty" if "suggested_order_qty" in plan.columns else "recommended_order_qty"
+    sel = plan[plan[qty_col] > 0].copy()
+    if sel.empty:
+        return (pd.DataFrame(columns=["supplier_id", "product_id", "product_name",
+                                      "order_qty", "unit_cost", "line_value"]),
+                pd.DataFrame(columns=["supplier_id", "supplier_name", "lines",
+                                      "total_units", "order_value", "min_order_value",
+                                      "meets_minimum"]))
+
+    prod = products.set_index("product_id")
+    sel["supplier_id"] = sel["product_id"].map(prod["supplier_id"])
+    lines = sel[["supplier_id", "product_id", "product_name", qty_col, "unit_cost"]].rename(
+        columns={qty_col: "order_qty"})
+    lines["line_value"] = (lines["order_qty"] * lines["unit_cost"]).round(2)
+    lines = lines.sort_values(["supplier_id", "line_value"],
+                              ascending=[True, False]).reset_index(drop=True)
+
+    summary = lines.groupby("supplier_id").agg(
+        lines=("product_id", "count"),
+        total_units=("order_qty", "sum"),
+        order_value=("line_value", "sum"),
+    ).reset_index()
+    if suppliers is not None:
+        sup = suppliers.set_index("supplier_id")
+        summary["supplier_name"] = summary["supplier_id"].map(sup.get("supplier_name"))
+        summary["min_order_value"] = summary["supplier_id"].map(
+            sup.get("min_order_value", pd.Series(dtype=float))).fillna(0.0)
+    else:
+        summary["supplier_name"] = summary["supplier_id"]
+        summary["min_order_value"] = 0.0
+    summary["order_value"] = summary["order_value"].round(2)
+    summary["meets_minimum"] = summary["order_value"] >= summary["min_order_value"]
+    cols = ["supplier_id", "supplier_name", "lines", "total_units",
+            "order_value", "min_order_value", "meets_minimum"]
+    return lines, summary[cols].sort_values("order_value", ascending=False).reset_index(drop=True)
