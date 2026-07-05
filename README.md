@@ -1,4 +1,4 @@
-# 📦 INVEN-AI — AI-Powered Inventory Management for MSMEs
+# 📦 INVEN-AI — AI-Powered Inventory Management
 
 An end-to-end, AI-powered inventory management system designed for **Micro, Small &
 Medium Enterprises (MSMEs)** — shops, distributors and small retailers — wrapped in a
